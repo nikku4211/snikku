@@ -1,0 +1,641 @@
+;==============================================================
+; WLA-DX banking setup
+;==============================================================
+
+.rombankmap
+bankstotal 1
+banksize $8000
+banks 1
+.endro
+
+.section "MakeSomeNoise" free
+; hl: song to load
+LoadSong:
+	push af
+		
+		ld a, (hl)
+		ld (SNiMusicType), a ;it's the song type
+		or a
+		jr nz, LoadTickSong
+		inc hl ;get the next byte from test song
+		ld a, (hl)
+		ld (SNiCh0MusicSpeedCounter), a ;it's the ticks per row
+		ld (SNiCh0MusicSpeed), a
+		inc hl
+		ld (SNiCh0MusicStart), hl ;start at that location
+		ld (SNiCh0MusicLoopPoint), hl ;loop at that location
+		ld (SNiCh0MusicPointer), hl
+		jp LoadSongFinished
+		
+LoadTickSong:
+		ld a, $01
+		ld (SNiCh0MusicSpeedCounter), a ;initialise the ticks per row
+		ld (SNiCh0MusicSpeed), a ;and tick speed
+		ld (SNiCh1MusicSpeedCounter), a ;initialise the ticks per row
+		ld (SNiCh1MusicSpeed), a ;and tick speed
+		ld (SNiCh2MusicSpeedCounter), a ;initialise the ticks per row
+		ld (SNiCh2MusicSpeed), a ;and tick speed
+		ld a, $00
+		ld (SNiCh0MusicSpeedCounter+1), a ;initialise the ticks per row
+		ld (SNiCh0MusicSpeed+1), a ;and tick speed
+		ld (SNiCh1MusicSpeedCounter+1), a ;initialise the ticks per row
+		ld (SNiCh1MusicSpeed+1), a ;and tick speed
+		ld (SNiCh2MusicSpeedCounter+1), a ;initialise the ticks per row
+		ld (SNiCh2MusicSpeed+1), a ;and tick speed
+		ld a, $0f
+		ld (SNiCh0MusicVolume), a ;initialise the volume
+		ld (SNiCh1MusicVolume), a ;initialise the volume
+		ld (SNiCh2MusicVolume), a ;initialise the volume
+		inc hl ;get the channel pointer
+		ld a, (hl)
+		ld (SNiCh0MusicStart), a ;start at that location
+		ld (SNiCh0MusicLoopPoint), a ;loop at that location
+		ld (SNiCh0MusicPointer), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh0MusicStart+1), a ;start at that location
+		ld (SNiCh0MusicLoopPoint+1), a ;loop at that location
+		ld (SNiCh0MusicPointer+1), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh1MusicStart), a ;start at that location
+		ld (SNiCh1MusicLoopPoint), a ;loop at that location
+		ld (SNiCh1MusicPointer), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh1MusicStart+1), a ;start at that location
+		ld (SNiCh1MusicLoopPoint+1), a ;loop at that location
+		ld (SNiCh1MusicPointer+1), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh2MusicStart), a ;start at that location
+		ld (SNiCh2MusicLoopPoint), a ;loop at that location
+		ld (SNiCh2MusicPointer), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh2MusicStart+1), a ;start at that location
+		ld (SNiCh2MusicLoopPoint+1), a ;loop at that location
+		ld (SNiCh2MusicPointer+1), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh3MusicStart), a ;start at that location
+		ld (SNiCh3MusicLoopPoint), a ;loop at that location
+		ld (SNiCh3MusicPointer), a
+		inc hl
+		ld a, (hl)
+		ld (SNiCh3MusicStart+1), a ;start at that location
+		ld (SNiCh3MusicLoopPoint+1), a ;loop at that location
+		ld (SNiCh3MusicPointer+1), a
+			
+LoadSongFinished:
+		
+	pop af
+	ret
+
+musicFrame:
+	push af
+		push de
+			push hl
+				ld a, (SNiMusicType) ;get the song type
+				or a ;is it 0?
+				jr nz, musicTickTypeStart
+musicCelTypeStart:
+				ld de,(SNiCh0MusicSpeedCounter) ;check the speed counter
+				dec de
+				ld (SNiCh0MusicSpeedCounter),de
+				ld a, e ;is it 0?
+				or a
+				jr nz,@musicFrameDone ;no? don't do anything
+				ld a, d
+				or a
+				jr nz,@musicFrameDone ;no? don't do anything
+				ld de,(SNiCh0MusicSpeed) ;yes? set the speed counter back to the speed
+				ld (SNiCh0MusicSpeedCounter),de
+				
+				ld hl,(SNiCh0MusicPointer) ;load the byte from the current note pointer
+				ld a,(hl)
+				cp $ff ;is it ff?
+				jr z,@musicLoop ;yes? loop
+				cp $fe ;is it fe?
+				jr z,@musicNoteHold ;yes? hold the note
+				cp $fd ;is it fd?
+				jr z,@musicNoteStop ;yes? stop the note
+				
+				ld de,periodTableLo ;load the low period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;3 2 1
+				;make some noise
+				;ld a,%10001111
+				;      ||||````- least significant bits of freq (122 hz)
+				;      `||`----- signify first byte of freq write
+				;       ``------ channel (0)
+				and %10011111
+				out (SoundOutput),a
+				
+				ld hl,(SNiCh0MusicPointer) ;load the byte from the current note pointer again
+				ld a,(hl)
+				
+				ld de,periodTableHi ;load the high period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;ld a,%00111111
+				;      | ``````- most significant bits of freq (122 hz)
+				;      `-------- signify second byte of freq write
+				and %00111111
+				out (SoundOutput),a
+				
+				ld a,%10010000
+				;     ||||````- channel volume (15)
+				;     `||`----- signify volume write
+				;      ``------ channel (0)
+				
+				out (SoundOutput),a
+				jr ++
+		
+@musicNoteStop:
+		
+				ld a,%10011111
+				;     ||||````- channel volume (0)
+				;     `||`----- signify volume write
+				;      ``------ channel (0)
+				
+				out (SoundOutput),a
+++:		
+				ld hl,(SNiCh0MusicPointer)
+@musicNoteHold:
+				inc hl
+				ld (SNiCh0MusicPointer), hl
+				jr @musicFrameDone
+		
+@musicLoop:
+				ld hl,(SNiCh0MusicLoopPoint)
+				ld (SNiCh0MusicPointer), hl
+				ld a, $01
+				ld (SNiCh0MusicSpeedCounter), a
+				jr musicCelTypeStart
+@musicFrameDone:
+			pop hl
+		pop de
+	pop af
+	ret
+
+musicTickTypeStart:
+
+musicCh0Start:
+
+				ld de,(SNiCh0MusicSpeedCounter) ;check the speed counter
+				ld a, e ;is it 0?
+				or a, d
+				jp nz,@downSpeedCounter ;no? don't do anything
+				;move on to the next note
+
+				ld hl,(SNiCh0MusicPointer) ;load the byte from the current note pointer
+				ld a,(hl)
+				cp $ff ;is it ff?
+				jp z,@musicLoop ;yes? loop
+				cp $fe ;is it fe?
+				jp z,@musicNoteHold ;yes? hold the note
+				cp $fd ;is it fd?
+				jp z,@musicNoteStop ;yes? stop the note
+				cp $fc ;is it fc?
+				jp z,@musicNoteHold16 ;yes? hold the note
+				cp $fb ;is it fb?
+				jp z,@musicNoteVolume ;yes? set the volume of the note
+				
+				ld de,periodTableLo ;load the low period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;3 2 1
+				;make some noise
+				;ld a,%10001111
+				;      ||||````- least significant bits of freq (122 hz)
+				;      `||`----- signify first byte of freq write
+				;       ``------ channel (0)
+				and %10011111
+				out (SoundOutput),a
+				
+				ld hl,(SNiCh0MusicPointer) ;load the byte from the current note pointer again
+				ld a,(hl)
+				
+				ld de,periodTableHi ;load the high period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;ld a,%00111111
+				;      | ``````- most significant bits of freq (122 hz)
+				;      `-------- signify second byte of freq write
+				and %00111111
+				out (SoundOutput),a
+				
+				ld a,SNiCh0MusicVolume
+				inc a
+				neg
+				and a,%00001111
+				or a,%10010000
+				;     ||||````- channel volume (15)
+				;     `||`----- signify volume write
+				;      ``------ channel (0)
+				
+				out (SoundOutput),a
+				jr ++
+		
+@musicNoteVolume:
+				inc hl
+				ld (SNiCh0MusicPointer), hl
+				ld a,(hl)
+				ld (SNiCh0MusicVolume),a
+				inc a
+				neg
+				and a,%00001111
+				or a,%10010000
+				;     ||||````- channel volume
+				;     `||`----- signify volume write
+				;      ``------ channel (0)
+				
+				out (SoundOutput),a
+				jr ++
+		
+@musicNoteStop:
+		
+				ld a,%10011111
+				;     ||||````- channel volume (0)
+				;     `||`----- signify volume write
+				;      ``------ channel (0)
+				
+				out (SoundOutput),a
+++:				
+				ld hl,(SNiCh0MusicPointer)
+				inc hl
+				ld (SNiCh0MusicPointer),hl
+				jr @downSpeedCounter
+@musicNoteHold:
+				inc hl
+				ld (SNiCh0MusicPointer), hl
+				ld a,(hl)
+				dec a
+				ld (SNiCh0MusicSpeed),a
+				ld (SNiCh0MusicSpeedCounter),a
+				ld a, $00
+				ld (SNiCh0MusicSpeed+1),a
+				ld (SNiCh0MusicSpeedCounter+1),a
+				inc hl
+				ld (SNiCh0MusicPointer), hl
+				
+				jr @downSpeedCounter
+			
+@musicNoteHold16:
+				inc hl
+				ld (SNiCh0MusicPointer), hl
+				ld e,(hl)
+				inc hl
+				ld d, (hl)
+				inc de
+				ld (SNiCh0MusicSpeed),de
+				ld (SNiCh0MusicSpeedCounter),de
+				inc hl
+				ld (SNiCh0MusicPointer), hl
+				
+				jr @downSpeedCounter
+		
+@musicLoop:
+				ld hl,(SNiCh0MusicLoopPoint)
+				ld (SNiCh0MusicPointer), hl
+				jp musicCh0Start
+@downSpeedCounter:
+				ld de,(SNiCh0MusicSpeedCounter) ;check the speed counter
+				ld a, e
+				or a, d
+				jr z, @musicFrameDone
+				dec de
+				ld (SNiCh0MusicSpeedCounter),de
+@musicFrameDone:
+
+musicCh1Start:
+				ld de,(SNiCh1MusicSpeedCounter) ;check the speed counter
+				ld a, e ;is it 0?
+				or a, d
+				jp nz,@downSpeedCounter ;no? don't do anything
+				;move on to the next note
+
+				ld hl,(SNiCh1MusicPointer) ;load the byte from the current note pointer
+				ld a,(hl)
+				cp $ff ;is it ff?
+				jp z,@musicLoop ;yes? loop
+				cp $fe ;is it fe?
+				jp z,@musicNoteHold ;yes? hold the note
+				cp $fd ;is it fd?
+				jp z,@musicNoteStop ;yes? stop the note
+				cp $fc ;is it fc?
+				jp z,@musicNoteHold16 ;yes? hold the note
+				cp $fb ;is it fb?
+				jp z,@musicNoteVolume ;yes? set the volume of the note
+				
+				ld de,periodTableLo ;load the low period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;3 2 1
+				;make some noise
+				;ld a,%10001111
+				;      ||||````- least significant bits of freq (122 hz)
+				;      `||`----- signify first byte of freq write
+				;       ``------ channel (0)
+				and %10011111
+				add a, %00100000
+				out (SoundOutput),a
+				
+				ld hl,(SNiCh1MusicPointer) ;load the byte from the current note pointer again
+				ld a,(hl)
+				
+				ld de,periodTableHi ;load the high period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;ld a,%00111111
+				;      | ``````- most significant bits of freq (122 hz)
+				;      `-------- signify second byte of freq write
+				and %00111111
+				out (SoundOutput),a
+				
+				ld a,SNiCh1MusicVolume
+				inc a
+				neg
+				and a,%00001111
+				or a,%10110000
+				;     ||||````- channel volume (15)
+				;     `||`----- signify volume write
+				;      ``------ channel (1)
+				
+				out (SoundOutput),a
+				jr ++
+		
+@musicNoteVolume:
+				inc hl
+				ld (SNiCh1MusicPointer), hl
+				ld a,(hl)
+				ld (SNiCh1MusicVolume),a
+				inc a
+				neg
+				and a,%00001111
+				or a,%10110000
+				;     ||||````- channel volume 
+				;     `||`----- signify volume write
+				;      ``------ channel (1)
+				
+				out (SoundOutput),a
+				jr ++		
+@musicNoteStop:
+		
+				ld a,%10111111
+				;     ||||````- channel volume (0)
+				;     `||`----- signify volume write
+				;      ``------ channel (1)
+				
+				out (SoundOutput),a
+++:				
+				ld hl,(SNiCh1MusicPointer)
+				inc hl
+				ld (SNiCh1MusicPointer),hl
+				jr @downSpeedCounter
+@musicNoteHold:
+				inc hl
+				ld (SNiCh1MusicPointer), hl
+				ld a,(hl)
+				dec a
+				ld (SNiCh1MusicSpeed),a
+				ld (SNiCh1MusicSpeedCounter),a
+				ld a, $00
+				ld (SNiCh1MusicSpeed+1),a
+				ld (SNiCh1MusicSpeedCounter+1),a
+				inc hl
+				ld (SNiCh1MusicPointer), hl
+				
+				jr @downSpeedCounter
+			
+@musicNoteHold16:
+				inc hl
+				ld (SNiCh1MusicPointer), hl
+				ld e,(hl)
+				inc hl
+				ld d, (hl)
+				inc de
+				ld (SNiCh1MusicSpeed),de
+				ld (SNiCh1MusicSpeedCounter),de
+				inc hl
+				ld (SNiCh1MusicPointer), hl
+				
+				jr @downSpeedCounter
+		
+@musicLoop:
+				ld hl,(SNiCh1MusicLoopPoint)
+				ld (SNiCh1MusicPointer), hl
+				jp musicCh1Start
+@downSpeedCounter:
+				ld de,(SNiCh1MusicSpeedCounter) ;check the speed counter
+				ld a, e
+				or a, d
+				jr z, @musicFrameDone
+				dec de
+				ld (SNiCh1MusicSpeedCounter),de
+@musicFrameDone:
+
+musicCh2Start:
+				ld de,(SNiCh2MusicSpeedCounter) ;check the speed counter
+				ld a, e ;is it 0?
+				or a, d
+				jp nz,@downSpeedCounter ;no? don't do anything
+				;move on to the next note
+
+				ld hl,(SNiCh2MusicPointer) ;load the byte from the current note pointer
+				ld a,(hl)
+				cp $ff ;is it ff?
+				jp z,@musicLoop ;yes? loop
+				cp $fe ;is it fe?
+				jp z,@musicNoteHold ;yes? hold the note
+				cp $fd ;is it fd?
+				jp z,@musicNoteStop ;yes? stop the note
+				cp $fc ;is it fc?
+				jp z,@musicNoteHold16 ;yes? hold the note
+				cp $fb ;is it fb?
+				jp z,@musicNoteVolume ;yes? set the volume of the note
+				
+				ld de,periodTableLo ;load the low period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;3 2 1
+				;make some noise
+				;ld a,%10001111
+				;      ||||````- least significant bits of freq (122 hz)
+				;      `||`----- signify first byte of freq write
+				;       ``------ channel (0)
+				and %10011111
+				add a, %01000000
+				out (SoundOutput),a
+				
+				ld hl,(SNiCh2MusicPointer) ;load the byte from the current note pointer again
+				ld a,(hl)
+				
+				ld de,periodTableHi ;load the high period table location
+				add a, e ;add what's in a to it
+				ld e, a
+				ex de,hl
+				ld a,(hl) ;and load from the sum of the period table location and the index
+				
+				;ld a,%00111111
+				;      | ``````- most significant bits of freq (122 hz)
+				;      `-------- signify second byte of freq write
+				and %00111111
+				out (SoundOutput),a
+				
+				ld a,SNiCh2MusicVolume
+				inc a
+				neg
+				and a,%00001111
+				or a,%11010000
+				;     ||||````- channel volume (15)
+				;     `||`----- signify volume write
+				;      ``------ channel (2)
+				
+				out (SoundOutput),a
+				jr ++
+		
+@musicNoteVolume:
+				inc hl
+				ld (SNiCh2MusicPointer), hl
+				ld a,(hl)
+				ld (SNiCh2MusicVolume),a
+				inc a
+				neg
+				and a,%00001111
+				or a,%11010000
+				;     ||||````- channel volume
+				;     `||`----- signify volume write
+				;      ``------ channel (0)
+				
+				out (SoundOutput),a
+				jr ++
+@musicNoteStop:
+		
+				ld a,%11011111
+				;     ||||````- channel volume (0)
+				;     `||`----- signify volume write
+				;      ``------ channel (2)
+				
+				out (SoundOutput),a
+++:				
+				ld hl,(SNiCh2MusicPointer)
+				inc hl
+				ld (SNiCh2MusicPointer),hl
+				jr @downSpeedCounter
+@musicNoteHold:
+				inc hl
+				ld (SNiCh2MusicPointer), hl
+				ld a,(hl)
+				dec a
+				ld (SNiCh2MusicSpeed),a
+				ld (SNiCh2MusicSpeedCounter),a
+				ld a, $00
+				ld (SNiCh2MusicSpeed+1),a
+				ld (SNiCh2MusicSpeedCounter+1),a
+				inc hl
+				ld (SNiCh2MusicPointer), hl
+				
+				jr @downSpeedCounter
+			
+@musicNoteHold16:
+				inc hl
+				ld (SNiCh2MusicPointer), hl
+				ld e,(hl)
+				inc hl
+				ld d, (hl)
+				inc de
+				ld (SNiCh2MusicSpeed),de
+				ld (SNiCh2MusicSpeedCounter),de
+				inc hl
+				ld (SNiCh2MusicPointer), hl
+				
+				jr @downSpeedCounter
+		
+@musicLoop:
+				ld hl,(SNiCh2MusicLoopPoint)
+				ld (SNiCh2MusicPointer), hl
+				jp musicCh2Start
+@downSpeedCounter:
+				ld de,(SNiCh2MusicSpeedCounter) ;check the speed counter
+				ld a, e
+				or a, d
+				jr z, @musicFrameDone
+				dec de
+				ld (SNiCh2MusicSpeedCounter),de
+@musicFrameDone:
+			pop hl
+		pop de
+	pop af
+	ret
+.ends
+
+.enum $c000 export
+	SNiMusicStatus						db
+	SNiMusicType							db
+	
+	SNiCh0MusicStart							dw
+	SNiCh0MusicPointer						dw
+	SNiCh0MusicLoopPoint					dw
+	SNiCh0MusicSkipFrames				db
+	SNiCh0MusicLoop							db
+	SNiCh0MusicSpeed							dw
+	SNiCh0MusicSpeedCounter			dw
+	SNiCh0MusicVolume							db
+	
+	SNiCh1MusicStart							dw
+	SNiCh1MusicPointer						dw
+	SNiCh1MusicLoopPoint					dw
+	SNiCh1MusicSkipFrames				db
+	SNiCh1MusicLoop							db
+	SNiCh1MusicSpeed							dw
+	SNiCh1MusicSpeedCounter			dw
+	SNiCh1MusicVolume							db
+	
+	SNiCh2MusicStart							dw
+	SNiCh2MusicPointer						dw
+	SNiCh2MusicLoopPoint					dw
+	SNiCh2MusicSkipFrames				db
+	SNiCh2MusicLoop							db
+	SNiCh2MusicSpeed							dw
+	SNiCh2MusicSpeedCounter			dw
+	SNiCh2MusicVolume							db
+	
+	SNiCh3MusicStart							dw
+	SNiCh3MusicPointer						dw
+	SNiCh3MusicLoopPoint					dw
+	SNiCh3MusicSkipFrames				db
+	SNiCh3MusicLoop							db
+	SNiCh3MusicSpeed							dw
+	SNiCh3MusicSpeedCounter			dw
+	SNiCh3MusicVolume							db
+	
+.ende
+
+.include "src/periods.z80"
+
+.include "src/testsong.z80"
+.include "src/testsongtick.z80"
